@@ -10,8 +10,10 @@ import SwiftMCP
 import Foundation
 import ArgumentParser
 
-struct StdioCommand: AsyncParsableCommand {
-    func run() async throws {
+public struct StdioCommand: AsyncParsableCommand {
+    public init() {}
+    
+    public func run() async throws {
         let weatherServer = WeatherMCPServer()
         let transport = StdioTransport(server: weatherServer)
         do {

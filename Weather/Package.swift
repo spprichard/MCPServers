@@ -9,14 +9,21 @@ let package = Package(
         .macOS(.v15)
     ],
     dependencies: [
-        .package(url: "https://github.com/Cocoanetics/SwiftMCP.git", branch: "async"),
+        .package(url: "https://github.com/Cocoanetics/SwiftMCP.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
     ],
     targets: [
+        .target(
+            name: "LibWeather",
+            dependencies: [
+                .product(name: "SwiftMCP", package: "SwiftMCP"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
+            ]
+        ),
         .executableTarget(
             name: "App",
             dependencies: [
-                .product(name: "SwiftMCP", package: "SwiftMCP"),
+                .byName(name: "LibWeather"),
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
