@@ -10,14 +10,21 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/Cocoanetics/SwiftMCP.git", branch: "main"),
-        .package(url: "https://github.com/apple/swift-log.git", exact: "1.6.3"),
+        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
     ],
     targets: [
-        .executableTarget(
-            name: "Calculator",
+        .target(
+            name: "LibCalculator",
             dependencies: [
                 .product(name: "SwiftMCP", package: "SwiftMCP"),
-                .product(name: "Logging", package: "swift-log"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser"),
+            ]
+        ),
+        .executableTarget(
+            name: "App",
+            dependencies: [
+                .byName(name: "LibCalculator"),
+                .product(name: "ArgumentParser", package: "swift-argument-parser")
             ]
         ),
     ]
