@@ -13,34 +13,13 @@ final class WeatherMCPServer: Sendable {
     let weatherClient = WeatherAPI()
     
     @MCPTool(description: "Priovides the current weather forcast for a provided latitde and longatude")
-    func forecast(latitde: Double, longatude: Double) -> String {
-        _forecast(latitde: latitde, longatude: longatude)
-    }
-    // MARK: At time of writing this, `@MCPTool` doesn't support calling `async` functions.
-    // `_forecast` is meant to be a workaround which uses a Semaphore to block while we wait for the API call to return
-    // not ideall...
-    private func _forecast(latitde: Double, longatude: Double) -> String {
-        let semaphore = DispatchSemaphore(value: 0)
-        var result: String?
-        var taskError: Error?
-        
-        Task {
-            do {
-                result = try await weatherClient.getForecast(latitde: latitde, longatude: longatude)
-            } catch {
-                taskError = error
-            }
-            
-            semaphore.signal()
-        }
-        
-        semaphore.wait()
-        
-        if let error = taskError {
+    func forecast(latitde: Double, longatude: Double) async -> String {
+        do {
+            return try await weatherClient.getForecast(latitde: latitde, longatude: longatude)
+        } catch {
             fputs("ERROR: \(error.localizedDescription)", stderr)
+            return "Unable to get forcast"
         }
-        
-        return result ?? "Unable to get forcast"
     }
 }
 
