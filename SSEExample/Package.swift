@@ -1,13 +1,11 @@
-// swift-tools-version: 5.9
-// Using version 5.9 to match SwiftMCP, due to build errors within SwiftMCP when using Swift 6.0
+// swift-tools-version: 6.1
 
 import PackageDescription
 
 let package = Package(
     name: "SSEExample",
     platforms: [
-        .macOS(.v14)
-        // .macOS(.v15) // TODO: Add support for v15 when moving to Swift 6.0
+         .macOS(.v15)
     ],
     products: [
         .library(
@@ -16,7 +14,7 @@ let package = Package(
         )
     ],
     dependencies: [
-        .package(url: "https://github.com/Cocoanetics/SwiftMCP.git", branch: "main"),
+        .package(url: "https://github.com/Cocoanetics/SwiftMCP.git", branch: "swift6"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),
         
         // Client
