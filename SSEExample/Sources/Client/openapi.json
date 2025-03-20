@@ -1,0 +1,49 @@
+{
+  "info" : {
+    "description" : "API for SSEServer providing various tools.",
+    "title" : "SSEServer",
+    "version" : "0.0.1"
+  },
+  "openapi" : "3.1.0",
+  "paths" : {
+    "\/sseserver\/ping" : {
+      "post" : {
+        "description" : "A tool to test if this is working",
+        "operationId" : "ping",
+        "requestBody" : {
+          "content" : {
+            "application\/json" : {
+              "schema" : {
+                "description" : "A tool to test if this is working",
+                "properties" : {
+
+                },
+                "type" : "object"
+              }
+            }
+          },
+          "required" : true
+        },
+        "responses" : {
+          "200" : {
+            "content" : {
+              "application\/json" : {
+                "schema" : {
+                  "type" : "string"
+                }
+              }
+            },
+            "description" : "The returned value of the tool"
+          }
+        },
+        "summary" : "ping"
+      }
+    }
+  },
+  "servers" : [
+    {
+      "description" : "Production Server",
+      "url" : "http:\/\/127.0.0.1"
+    }
+  ]
+}
