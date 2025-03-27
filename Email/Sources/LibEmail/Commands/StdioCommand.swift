@@ -11,14 +11,15 @@ import Foundation
 import SwiftDotenv
 import ArgumentParser
 
-package struct EmailCommand: AsyncParsableCommand {
+package struct StdioCommand: AsyncParsableCommand {
+    package static let configuration: CommandConfiguration = .init(
+        commandName: "stdio"
+    )
+    
     package init() {}
     
     package func run() async throws {
-        let serverConfiguration = try EmailConfigurationProvider.loadDotEnvConfiguration()
-         
-        let emailServer = MCPEmailServer(configuration: serverConfiguration)
-        try await emailServer.setup()
+        let emailServer = try await EmailServerFactory.make()
         
         defer {
             // Not sure if firing a task he is best practice...
@@ -29,6 +30,5 @@ package struct EmailCommand: AsyncParsableCommand {
         
         let transport = StdioTransport(server: emailServer)
         try await transport.run()
-        
     }
 }

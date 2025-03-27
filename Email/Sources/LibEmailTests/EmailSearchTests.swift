@@ -25,7 +25,7 @@ struct EmailSearchTests {
         let result = try await emailServer.callTool(
             "search",
             arguments: [
-                "sender" : "Github"
+                "from" : "Github"
             ]
         )
         

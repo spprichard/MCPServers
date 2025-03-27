@@ -12,25 +12,14 @@ import Foundation
 
 @_exported import SwiftIMAP
 
-extension Array where Element == Mailbox.Info {
-    /// Find the first mailbox matching the string `receipts`
-    public var receipts: Element? {
-        guard let mailbox = first(where: { $0.name.lowercased() == "receipts" }) else {
-            return nil
-        }
-        
-        return mailbox
-    }
-}
-
 @MCPServer(name: "Email Server", version: "0.0.1")
 package actor MCPEmailServer {
     private let configuration: Configuration
-    private let emailServer: IMAPServer
+    private let server: IMAPServer
         
     package init(configuration: Configuration) {
         self.configuration = configuration
-        self.emailServer = IMAPServer(
+        self.server = IMAPServer(
             host: configuration.host,
             port: configuration.port,
             numberOfThreads: 1
@@ -43,26 +32,26 @@ package actor MCPEmailServer {
     }
     
     package func conenct() async throws {
-        try await emailServer.connect()
+        try await server.connect()
     }
     
     package func disconnect() async throws {
-        try await emailServer.disconnect()
+        try await server.disconnect()
     }
     
     package func login() async throws {
-        try await emailServer.login(
+        try await server.login(
             username: configuration.username,
             password: configuration.password
         )
     }
         
     @MCPTool(description: "Fetches the subject line of your last email")
-    package func fetchLastEmail() async throws(MCPEmailServer.Errors) -> String {
-        let specialFolders = try await getMailBoxInfo()
+    package func fetchLastEmail() async throws -> String {
+        let specialFolders = try await server.listSpecialUseMailboxes()
         
         guard let inbox = specialFolders.inbox else {
-            throw .failedToFetchInbox
+            throw MCPEmailServer.Errors.failedToFetchInbox
         }
         
         let mailboxStatus = try await selectInbox(from: inbox)
@@ -70,26 +59,10 @@ package actor MCPEmailServer {
         return try await fetchLatestSubject(from: mailboxStatus)
     }
     
-    @MCPTool(description: "Searches your inbox for unseen emails from a given sender")
-    package func search(sender: String) async throws -> String {
-        let specialFolders = try await getMailBoxInfo()
-        guard let inbox = specialFolders.inbox else {
-            return "Failed to fetch inbox"
-        }
-        
-        let _ = try await emailServer.selectMailbox(inbox.name)
-        let unreadMessagesSet: MessageIdentifierSet<SequenceNumber> = try await emailServer.search(
-            criteria: [
-                .unseen,
-                .from(sender)
-            ]
-        )
-        return "Found \(unreadMessagesSet.count) unread messages"
-    }
     
     @MCPTool(description: "Fetch unseen emails with pdf attachments from receipts mailbox")
     func fetchEmailsFromReceiptsMailbox() async throws -> [EmailMessage] {
-        guard let receiptsMailbox = try await emailServer.listMailboxes().receipts else {
+        guard let receiptsMailbox = try await server.listMailboxes().receipts else {
             throw MCPEmailServer.Errors.failedToFetchReceiptsMailbox
         }
             
@@ -99,30 +72,39 @@ package actor MCPEmailServer {
             .map { .init(message: $0) }
     }
     
-    struct EmailMessage: Sendable, Codable {
-        enum Attachment: Codable {
-            case pdf(Data)
+    // MARK: Search Tools
+    @MCPTool(description: "Searches your inbox for unseen emails from a given sender in the last number of days (defaults to 7)")
+    package func search(from sender: String, inLastNumberOfDays: Int = 7) async throws -> [EmailMessage] {
+        var criteria: [SearchCriteria] = [
+            .unseen,
+            .from(sender),
+        ]
+        
+        if let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -inLastNumberOfDays, to: .now) {
+            criteria.append(.since(sevenDaysAgo))
         }
         
-        let subject: String
-        let rawText: String?
-        let htmlText: String?
-        let attachment: Attachment?
-        
-        init(message: Message) {
-            self.subject = message.subject
-            self.rawText = message.textBody
-            self.htmlText = message.htmlBody
-            self.attachment = message
-                .attachments
-                .filter { $0.contentType == "application" && $0.contentSubtype == "pdf" }
-                .map { part in
-                    return Attachment.pdf(part.decodedContent())
-                }
-                .first
-        }
+        return try await performSearchOnSpecialUseMailBoxes(
+            on: "inbox",
+            with: .init(criterias: criteria)
+        )
+        .map { .init(message: $0) }
     }
     
+    private func performSearchOnSpecialUseMailBoxes(on name: String, with criteria: SearchableCriteria) async throws -> [Message] {
+        let specialFolders = try await server.listSpecialUseMailboxes()
+        guard let mailbox = specialFolders.first(where: { $0.name.localizedStandardContains(name) }) else {
+            throw MCPEmailServer.Errors.failedToFetchRequestedMailbox(name)
+        }
+        
+        _ = try await server.selectMailbox(mailbox.name)
+        let messagesSet: MessageIdentifierSet<SequenceNumber> = try await server.search(
+            criteria: criteria.criterias
+        )
+        
+        return try await server.fetchMessages(using: messagesSet)
+    }
+        
     // Currently only throws a `BAD` error
 //    @MCPTool(description: "Searches recent unseen emails for subjects containing provided string")
 //    package func searchEmail(subject: String) async throws -> [Message] {
@@ -153,10 +135,34 @@ package actor MCPEmailServer {
 }
 
 extension MCPEmailServer {
+    package struct EmailMessage: Sendable, Codable {
+        enum Attachment: Codable {
+            case pdf(Data)
+        }
+        
+        let subject: String
+        let rawText: String?
+        let htmlText: String?
+        let attachment: Attachment?
+        
+        package init(message: Message) {
+            self.subject = message.subject
+            self.rawText = message.textBody
+            self.htmlText = message.htmlBody
+            self.attachment = message
+                .attachments
+                .filter { $0.contentType == "application" && $0.contentSubtype == "pdf" }
+                .map { part in
+                    return Attachment.pdf(part.decodedContent())
+                }
+                .first
+        }
+    }
+}
 
-    
+extension MCPEmailServer {
     // NOTE: This is needed becuase `SearchCriteria` is not sendable based on the current SwiftMail package version
-    struct SearhableCriteria: Sendable {
+    struct SearchableCriteria: Sendable {
         let criterias: [SwiftIMAP.SearchCriteria]
     }
     
@@ -166,7 +172,7 @@ extension MCPEmailServer {
         }
         
         do {
-            return try await emailServer
+            return try await server
                 .fetchMessages(using: latest)
                 // .filter { $0.attachments.count > 0 && $0.attachments.contains { $0.contentType == "application/pdf" } }
                 .filter { $0.attachments.count > 0 }
@@ -186,7 +192,7 @@ extension MCPEmailServer {
     // TODO: Refactor to return more than just subject
     private func fetchLatest(_ count: Int = 1, with mailboxStatus: Mailbox.Status) async throws -> String {
         if let latestMessageSet = mailboxStatus.latest(count) {
-            let latestHeader = try await emailServer.fetchHeaders(using: latestMessageSet)
+            let latestHeader = try await server.fetchHeaders(using: latestMessageSet)
             guard let latest = latestHeader.first else {
                 throw MCPEmailServer.Errors.failedToFetchLatestMessageSubject
             }
@@ -196,34 +202,13 @@ extension MCPEmailServer {
         
         throw MCPEmailServer.Errors.failedToFetchLatestMessageSubject
     }
-    
-    private func search(for criteria: SearhableCriteria) async throws -> [Message] {
-        let ids: MessageIdentifierSet<UID> = try await emailServer.search(
-            criteria: criteria.criterias
-        )
-        
-        if !ids.isEmpty {
-            return  try await emailServer
-                .fetchMessages(using: ids)
-        }
-        
-        return []
-    }
-    
+
     
     private func selectInbox(from info: Mailbox.Info) async throws(MCPEmailServer.Errors) -> Mailbox.Status {
         do {
-            return try await emailServer.selectMailbox(info.name)
+            return try await server.selectMailbox(info.name)
         } catch {
             throw .failedToSelectInbox(error)
-        }
-    }
-    
-    private func getMailBoxInfo() async throws(MCPEmailServer.Errors) -> [Mailbox.Info] {
-        do {
-            return try await emailServer.listSpecialUseMailboxes()
-        } catch {
-            throw .failedToListSpecialUseMailboxes(error)
         }
     }
 }
@@ -248,5 +233,6 @@ extension MCPEmailServer {
         case failedToFetchLatestMessageSubject
         case failedToFetchHeaders(Error)
         case failedToFetchReceiptsMailbox
+        case failedToFetchRequestedMailbox(String)
     }
 }
