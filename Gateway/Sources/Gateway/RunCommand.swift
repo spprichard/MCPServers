@@ -1,19 +1,19 @@
 //
-//  HTTPSSECommand.swift
-//  Email
+//  RunCommand.swift
+//  Gateway
 //
-//  Created by Steven Prichard on 2025-03-22.
+//  Created by Steven Prichard on 2025-03-27.
 //
 
 import SwiftMCP
-import SwiftMail
-import Foundation
+import LibGateway
+import MistralKit
 import SwiftDotenv
 import ArgumentParser
 
-package struct HTTPSSECommand: AsyncParsableCommand {
-    package static let configuration: CommandConfiguration = .init(
-        commandName: "http"
+struct RunCommand: AsyncParsableCommand {
+    static let configuration: CommandConfiguration = .init(
+        commandName: "run"
     )
     
     @Option(name: .long, help: "The port to listen on")
@@ -25,16 +25,26 @@ package struct HTTPSSECommand: AsyncParsableCommand {
     package init() {}
     
     package func run() async throws {
-        let emailServer = try await EmailServerFactory.make()
+        let childServers = try await GatewayServer.ServerFactory.make()
+        guard case let .string(mistralAPIKey) = Dotenv["MISTRAL_API_KEY"] else {
+            print("❌ Missing or invalid IMAP credentials in .env file")
+            throw Errors.invalidConfiguration
+        }
+        
+        let mistralClient = MistralClient(apiKey: mistralAPIKey)
+        let gateway = GatewayServer(
+            servers: childServers,
+            mistralClient: mistralClient
+        )
         
         defer {
             // Not sure if firing a task he is best practice...
             Task {
-                try await emailServer.disconnect()
+                try await gateway.disconnect()
             }
         }
         
-        let httpServer = HTTPSSETransport(server: emailServer, port: port)
+        let httpServer = HTTPSSETransport(server: gateway, port: port)
         httpServer.serveOpenAPI = true
         registerAuthentication(for: httpServer)
         
@@ -62,5 +72,9 @@ package struct HTTPSSECommand: AsyncParsableCommand {
         }
         
         return .authorized
+    }
+    
+    enum Errors: Error {
+        case invalidConfiguration
     }
 }

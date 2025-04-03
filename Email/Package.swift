@@ -8,6 +8,15 @@ let package = Package(
     platforms: [
         .macOS(.v15)
     ],
+    products: [
+        .library(
+            name: "LibEmail",
+            type: .static,
+            targets: [
+                "LibEmail"
+            ]
+        )
+    ],
     dependencies: [
         .package(url: "https://github.com/Cocoanetics/SwiftMCP.git", branch: "main"),
         .package(url: "https://github.com/apple/swift-argument-parser", from: "1.2.0"),

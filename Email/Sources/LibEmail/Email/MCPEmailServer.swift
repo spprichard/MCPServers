@@ -6,18 +6,16 @@
 //
 
 import SwiftMCP
+import SwiftMail
 import Foundation
-@preconcurrency import SwiftIMAP
-@preconcurrency import SwiftMailCore
 
-@_exported import SwiftIMAP
 
 @MCPServer(name: "Email Server", version: "0.0.1")
-package actor MCPEmailServer {
+public actor MCPEmailServer {
     private let configuration: Configuration
     private let server: IMAPServer
         
-    package init(configuration: Configuration) {
+    public init(configuration: Configuration) {
         self.configuration = configuration
         self.server = IMAPServer(
             host: configuration.host,
@@ -26,20 +24,20 @@ package actor MCPEmailServer {
         )
     }
     
-    package func setup() async throws {
+    public func setup() async throws {
         try await conenct()
         try await login()
     }
     
-    package func conenct() async throws {
+    public func conenct() async throws {
         try await server.connect()
     }
     
-    package func disconnect() async throws {
+    public func disconnect() async throws {
         try await server.disconnect()
     }
     
-    package func login() async throws {
+    public func login() async throws {
         try await server.login(
             username: configuration.username,
             password: configuration.password
@@ -47,7 +45,7 @@ package actor MCPEmailServer {
     }
         
     @MCPTool(description: "Fetches the subject line of your last email")
-    package func fetchLastEmail() async throws -> String {
+    public func fetchLastEmail() async throws -> String {
         let specialFolders = try await server.listSpecialUseMailboxes()
         
         guard let inbox = specialFolders.inbox else {
@@ -61,7 +59,7 @@ package actor MCPEmailServer {
     
     
     @MCPTool(description: "Fetch unseen emails with pdf attachments from receipts mailbox")
-    func fetchEmailsFromReceiptsMailbox() async throws -> [EmailMessage] {
+    public func fetchEmailsFromReceiptsMailbox() async throws -> [Message] {
         guard let receiptsMailbox = try await server.listMailboxes().receipts else {
             throw MCPEmailServer.Errors.failedToFetchReceiptsMailbox
         }
@@ -69,41 +67,78 @@ package actor MCPEmailServer {
         let status = try await selectInbox(from: receiptsMailbox)
         return try await self
             .getEmailsWithAttachments(from: status)
-            .map { .init(message: $0) }
+//            .map {
+//                .init(message: $0)
+//            }
     }
+    
+    public func downloadPDFAttachment(from email: Message) async throws -> URL {
+        // Find the PDF attachment in the email parts
+        guard let pdfPart = email.parts.first(where: { part in
+            part.filename?.hasSuffix(".pdf") == true
+        }) else {
+            throw Errors.missingAttachment
+        }
+        
+        // Get the documents directory URL
+        guard let documentsURL = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            throw Errors.failedToLoadFile
+        }
+        
+        // Create the destination URL with the attachment's filename
+        let destinationURL = documentsURL.appending(path: pdfPart.filename ?? "attachment.pdf")
+
+        let decoded = try GmailPDFMessagePartDecoder.decode(pdfPart)
+        try decoded.write(to: destinationURL, options: [.atomic])
+        
+        return destinationURL
+    }
+    
+    // Is utf8 the right encoding?
+//    let pdfDataString = String(data: pdfPart.data, encoding: .utf8)!
+//    pdfDataString
+//        .replacingOccurrences(of: "+", with: "-")
+//        .replacingOccurrences(of: "_", with: "/")
+//        .data(using: .utf8)
+//        
+//    let decoded = Data(base64Encoded: pdfDataString,  options: .ignoreUnknownCharacters)!
+//    
+//    // Write the attachment data to the file
+//    // try pdfPart.data.write(to: destinationURL, options: [.atomic])
+//    try decoded.write(to: destinationURL, options: [.atomic])
     
     // MARK: Search Tools
-    @MCPTool(description: "Searches your inbox for unseen emails from a given sender in the last number of days (defaults to 7)")
-    package func search(from sender: String, inLastNumberOfDays: Int = 7) async throws -> [EmailMessage] {
-        var criteria: [SearchCriteria] = [
-            .unseen,
-            .from(sender),
-        ]
-        
-        if let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -inLastNumberOfDays, to: .now) {
-            criteria.append(.since(sevenDaysAgo))
-        }
-        
-        return try await performSearchOnSpecialUseMailBoxes(
-            on: "inbox",
-            with: .init(criterias: criteria)
-        )
-        .map { .init(message: $0) }
-    }
+//    @MCPTool(description: "Searches your inbox for unseen emails from a given sender in the last number of days (defaults to 7)")
+//    package func search(from sender: String, inLastNumberOfDays: Int = 7) async throws -> [EmailMessage] {
+//        var criteria: [SearchCriteria] = [
+//            .unseen,
+//            .from(sender),
+//        ]
+//        
+//        if let sevenDaysAgo = Calendar.current.date(byAdding: .day, value: -inLastNumberOfDays, to: .now) {
+//            criteria.append(.since(sevenDaysAgo))
+//        }
+//        
+//        return try await performSearchOnSpecialUseMailBoxes(
+//            on: "inbox",
+//            with: .init(criterias: criteria)
+//        )
+//        .map { .init(message: $0) }
+//    }
     
-    private func performSearchOnSpecialUseMailBoxes(on name: String, with criteria: SearchableCriteria) async throws -> [Message] {
-        let specialFolders = try await server.listSpecialUseMailboxes()
-        guard let mailbox = specialFolders.first(where: { $0.name.localizedStandardContains(name) }) else {
-            throw MCPEmailServer.Errors.failedToFetchRequestedMailbox(name)
-        }
-        
-        _ = try await server.selectMailbox(mailbox.name)
-        let messagesSet: MessageIdentifierSet<SequenceNumber> = try await server.search(
-            criteria: criteria.criterias
-        )
-        
-        return try await server.fetchMessages(using: messagesSet)
-    }
+//    private func performSearchOnSpecialUseMailBoxes(on name: String, with criteria: SearchableCriteria) async throws -> [Message] {
+//        let specialFolders = try await server.listSpecialUseMailboxes()
+//        guard let mailbox = specialFolders.first(where: { $0.name.localizedStandardContains(name) }) else {
+//            throw MCPEmailServer.Errors.failedToFetchRequestedMailbox(name)
+//        }
+//        
+//        _ = try await server.selectMailbox(mailbox.name)
+//        let messagesSet: MessageIdentifierSet<SequenceNumber> = try await server.search(
+//            criteria: criteria.criterias
+//        )
+//        
+//        return try await server.fetchMessages(using: messagesSet)
+//    }
         
     // Currently only throws a `BAD` error
 //    @MCPTool(description: "Searches recent unseen emails for subjects containing provided string")
@@ -134,18 +169,26 @@ package actor MCPEmailServer {
 //    }
 }
 
+
+
 extension MCPEmailServer {
-    package struct EmailMessage: Sendable, Codable {
-        enum Attachment: Codable {
-            case pdf(Data)
+    public struct EmailMessage: Sendable, Codable {
+        public struct Attachment: Codable, Sendable {
+            public enum FileType: Codable, Sendable {
+                case pdf
+            }
+            
+            public var filename: String
+            public var type: FileType
+            public var data: Data
         }
         
-        let subject: String
-        let rawText: String?
-        let htmlText: String?
-        let attachment: Attachment?
+        public let subject: String
+        public let rawText: String?
+        public let htmlText: String?
+        public let attachment: Attachment?
         
-        package init(message: Message) {
+        public init(message: Message) {
             self.subject = message.subject
             self.rawText = message.textBody
             self.htmlText = message.htmlBody
@@ -153,7 +196,11 @@ extension MCPEmailServer {
                 .attachments
                 .filter { $0.contentType == "application" && $0.contentSubtype == "pdf" }
                 .map { part in
-                    return Attachment.pdf(part.decodedContent())
+                    return Attachment(
+                        filename: part.suggestedFilename(),
+                        type: .pdf,
+                        data: part.data
+                    )
                 }
                 .first
         }
@@ -162,9 +209,9 @@ extension MCPEmailServer {
 
 extension MCPEmailServer {
     // NOTE: This is needed becuase `SearchCriteria` is not sendable based on the current SwiftMail package version
-    struct SearchableCriteria: Sendable {
-        let criterias: [SwiftIMAP.SearchCriteria]
-    }
+//    struct SearchableCriteria: Sendable {
+//        let criterias: [SwiftMail.SearchCriteria]
+//    }
     
     private func getEmailsWithAttachments(from mailbox: Mailbox.Status) async throws(Errors) -> [Message] {
         guard let latest = mailbox.latest(10) else {
@@ -174,8 +221,10 @@ extension MCPEmailServer {
         do {
             return try await server
                 .fetchMessages(using: latest)
-                // .filter { $0.attachments.count > 0 && $0.attachments.contains { $0.contentType == "application/pdf" } }
-                .filter { $0.attachments.count > 0 }
+                .filter {
+                    $0.attachments.count > 0 &&
+                    $0.attachments.contains { $0.contentType == "application" && $0.contentSubtype == "pdf" }
+                }
         } catch {
             throw .unknown(error)
         }
@@ -214,14 +263,16 @@ extension MCPEmailServer {
 }
 
 extension MCPEmailServer {
-    package struct Configuration {
+    public struct Configuration {
         var host: String
         var username: String
         var password: String
         var port: Int
     }
     
-    package enum Errors: Error {
+    public enum Errors: Error {
+        case failedToLoadFile
+        case missingAttachment
         case unknown(Error)
         case failedToFetchLatest
         case invalidConfiguration
