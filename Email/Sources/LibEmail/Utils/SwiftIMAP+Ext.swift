@@ -5,7 +5,7 @@
 //  Created by Steven Prichard on 2025-03-25.
 //
 
-import SwiftIMAP
+import SwiftMail
 import Foundation
 
 extension Array where Element == Mailbox.Info {

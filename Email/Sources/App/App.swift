@@ -23,5 +23,3 @@ struct App: AsyncParsableCommand {
         defaultSubcommand: HTTPSSECommand.self
     )
 }
-
-

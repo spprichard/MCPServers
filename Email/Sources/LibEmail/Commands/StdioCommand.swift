@@ -6,7 +6,7 @@
 //
 
 import SwiftMCP
-import SwiftIMAP
+import SwiftMail
 import Foundation
 import SwiftDotenv
 import ArgumentParser

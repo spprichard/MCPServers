@@ -6,8 +6,8 @@
 //
 
 
-enum EmailServerFactory {
-    static func make() async throws -> MCPEmailServer {
+public enum EmailServerFactory {
+    public static func make() async throws -> MCPEmailServer {
         let serverConfiguration = try EmailConfigurationProvider.loadDotEnvConfiguration()
          
         let emailServer = MCPEmailServer(configuration: serverConfiguration)
